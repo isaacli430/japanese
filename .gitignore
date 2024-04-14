@@ -1,4 +1,11 @@
 *
 
 !.gitignore
-!funny.c
+
+!src/
+!src/*
+
+!include/
+!include/*
+
+!Makefile
