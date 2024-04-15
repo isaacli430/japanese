@@ -13,13 +13,34 @@
 #define KATAKANA_MIN 0xe382a1
 #define KATAKANA_MAX 0xe383ba
 
-#define KANJI_MIN 0xe4b880
-#define KANJI_MAX 0xe9bda2
-
 #define FIRST_ALLOWED_HIRAGANA KAGIRI
 #define LAST_ALLOWED_HIRAGANA HA
 
 #define KANJI_COUNT 2133
+
+#define INSERT_IDENTIFIER(line, counter, identifier_array, token_array) ({                  \
+    unsigned char *word = malloc(counter + 1);                                              \
+    strncpy(word, line, counter);                                                           \
+    word[counter] = 0;                                                                      \
+    uint8_t type = LOCAL_IDENTIFIER;                                                        \
+    int index = get_identifier(identifier_array, word);                                     \
+    uint16_t position;                                                                      \
+    if (index == -1) {                                                                      \
+        position = identifier_array->count - current_scope;                                 \
+        write_identifier(identifier_array, word);                                           \
+    } else if (index >= current_scope) {                                                    \
+        position = index - current_scope;                                                   \
+        free(word);                                                                         \
+    } else {                                                                                \
+        position = index;                                                                   \
+        type = ENCLOSING_IDENTIFIER;                                                        \
+        free(word);                                                                         \
+    }                                                                                       \
+    Token token = { type, position };                                                       \
+    write_token(&token_array, token);                                                       \
+    line += counter;                                                                        \
+})
+
 
 int compare_kanji(const void *a, const void *b) {
     return ( *(int *)a - *(int *)b );
@@ -33,18 +54,36 @@ bool is_kanji(uint32_t kanji) {
     return true;
 }
 
-int parse(char *line) {
+int get_identifier(IdentifierArray *identifier_array, char *identifier) {
+    int index = -1;
+    for (int i = 0; i < identifier_array->count; i++) {
+        if (strcmp(identifier, identifier_array->data[i]) == 0)
+            index = i;
+    }
+    return index;
+}
 
-    int line_count = 0;
+int parse(char *line, uint8_t parent_indent, uint16_t *line_count, IdentifierArray *identifier_array, ValueArray *value_array, OperationArray *operation_array) {
+
+    uint16_t current_scope = identifier_array->count;
 
     while (*line != 0) {
 
         TokenArray token_array;
-        initTokenArray(&token_array);
+        init_token_array(&token_array);
 
-        line_count++;
+        (*line_count)++;
 
-        // if ()
+        uint8_t indent = 0;
+        while (*line == ' ') {
+            if (strncmp(line, "    ", 4) == 0) {
+                indent++;
+                line += 4;
+            } else {
+                return -1;
+            }
+                
+        }
 
         while (*line != '\n' && *line != 0) {
             if (*line == ' ') {
@@ -55,11 +94,8 @@ int parse(char *line) {
 
                 while (*(line + counter) >= 'A' && *(line + counter) <= 'z')
                     counter++;
-                
-                Token token = { IDENTIFIER, 0 };
-                writeToken(&token_array, token);
 
-                line += counter;
+                INSERT_IDENTIFIER(line, counter, identifier_array, token_array);
             }
 
             else if (isdigit(*line)) {
@@ -80,9 +116,25 @@ int parse(char *line) {
 
                 char tmp[counter + 1];
                 strncpy(tmp, line, counter);
+                tmp[counter] = 0;
 
-                Token token = { type, 0 };
-                writeToken(&token_array, token);
+                uint16_t position = -1;
+                ValueData data;
+
+                if (type == INT) {
+                    int tmp_int = atoi(tmp);
+                    data.int_value = tmp_int;
+
+                } else if (type == FLOAT) {
+                    double tmp_double = atof(tmp);
+                    data.double_value = tmp_double;
+                }
+
+                position = value_array->count;
+                write_value(value_array, type, data);
+
+                Token token = { type, position };
+                write_token(&token_array, token);
 
                 line += counter;
 
@@ -94,18 +146,30 @@ int parse(char *line) {
                 uint16_t counter = 0;
                 while (*(line + counter) != '"') {
                     if (*(line + counter) == 0 || *(line + counter) == '\n') {                   
-                        freeTokenArray(&token_array);
+                        free_token_array(&token_array);
                         return -1;
                     }
 
                     counter++;
                 }
 
-                // char *value = (char *)malloc(counter + 1);
-                // strncpy(value, line, counter);
+                char *value = (char *)malloc(counter + 1);
+                if (value == NULL)
+                    exit(1);
+
+                strncpy(value, line, counter);
+                value[counter] = 0;
+
+                uint16_t position = value_array->count;
+
+                ValueData data;
+                data.str_value.is_constant = true;
+                data.str_value.pointer = value;
+
+                write_value(value_array, STR, data);
                 
-                Token token = { STR, 0 };
-                writeToken(&token_array, token);
+                Token token = { STR, position };
+                write_token(&token_array, token);
 
                 line += counter + 1;
                 
@@ -182,7 +246,7 @@ int parse(char *line) {
                 }
 
                 Token token = { type, 0 };
-                writeToken(&token_array, token);
+                write_token(&token_array, token);
                 line++;
             } 
 
@@ -190,32 +254,30 @@ int parse(char *line) {
             
                 if (strncmp(line, "、", 3) == 0) {
                     Token token = { COMMA, 0 };
-                    writeToken(&token_array, token);
+                    write_token(&token_array, token);
                     line += 3;
                 }
 
                 else if (strncmp(line, "　", 3) == 0) {
-                    Token token = { COMMA, 0 };
-                    writeToken(&token_array, token);
                     line += 3;
                 }
 
                 else if (strncmp(line, "真", 3) == 0) {
-                    Token token = { TRU, 0 };
-                    writeToken(&token_array, token);
+                    Token token = { BOOLEAN, 1 };
+                    write_token(&token_array, token);
                     line += 3;
                 }
 
                 else if (strncmp(line, "偽", 3) == 0) {
-                    Token token = { FAL, 0 };
-                    writeToken(&token_array, token);
+                    Token token = { BOOLEAN, 0 };
+                    write_token(&token_array, token);
                     line += 3;
                 }
 
                 else if (strncmp(line, "関数", 6) == 0) {
                     Token token = { FUNC, 0 };
-                    writeToken(&token_array, token);
-                    line += 3;
+                    write_token(&token_array, token);
+                    line += 6;
                 }
 
                 else {
@@ -243,12 +305,7 @@ int parse(char *line) {
                             }
                         }
 
-                        // unsigned char *word = malloc(counter_start + 1);
-                        // strncpy(word, line, counter_start);
-
-                        Token token = { IDENTIFIER, 0 };
-                        writeToken(&token_array, token);
-                        line += counter;
+                        INSERT_IDENTIFIER(line, counter, identifier_array, token_array);
                     }
 
                     else if (kana_int >= KATAKANA_MIN && kana_int <= KATAKANA_MAX) {
@@ -266,12 +323,7 @@ int parse(char *line) {
                                 
                         }
                         
-                        // unsigned char *word = malloc(counter_start + 1);
-                        // strncpy(word, line, counter_start);
-
-                        Token token = { IDENTIFIER, 0 };
-                        writeToken(&token_array, token);
-                        line += counter;
+                        INSERT_IDENTIFIER(line, counter, identifier_array, token_array);
                     }
 
                     else if (kana_int >= HIRAGANA_MIN && kana_int <= HIRAGANA_MAX) {
@@ -304,39 +356,40 @@ int parse(char *line) {
                         }
                         
                         if (word_type == -1) {
-                            freeTokenArray(&token_array);
+                            free_token_array(&token_array);
                             return -1;
                         }
 
                         Token token = { word_type, 0 };
-                        writeToken(&token_array, token);
+                        write_token(&token_array, token);
                         line += counter;
                     }
 
 
                     else {
-                        freeTokenArray(&token_array);
+                        free_token_array(&token_array);
                         return -1;
                     }
-
+                    
                 }
-
-
-                
             }
 
             else {
-                freeTokenArray(&token_array);
+                free_token_array(&token_array);
                 return -1;
             }
 
         }
-        printf("line %d: ", line_count);
-        printTokenArray(&token_array);
-        freeTokenArray(&token_array);
+        printf("line %d, indent: %d: ", *line_count, indent);
+        print_token_array(&token_array);
+        
+        free_token_array(&token_array);
 
         if (*line == '\n')
             line++;
     }
+
+    print_identifier_array(identifier_array);
+    truncate_identifiers_from_index(identifier_array, current_scope);
     return 0;
 }

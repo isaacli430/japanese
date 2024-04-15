@@ -4,10 +4,13 @@
 #endif
 
 enum Types {
-    IDENTIFIER,
     STR,
     INT,
     FLOAT,
+    BOOLEAN,
+    OBJECT,
+    ENCLOSING_IDENTIFIER,
+    LOCAL_IDENTIFIER,
     OPEN_SQ,
     CLOSE_SQ,
     OPEN_PAREN,
@@ -22,8 +25,6 @@ enum Types {
     NOT_EQUAL,
     NOT,
     EQUAL,
-    TRU,
-    FAL,
     FUNC,
     KAGIRI,
     NO,
@@ -31,14 +32,8 @@ enum Types {
 };
 
 typedef struct {
-    uint16_t count;
-    uint16_t capacity;
-    uint8_t *data;
-} ByteArray;
-
-typedef struct {
-    uint16_t type;
-    uint8_t value;
+    uint8_t type;
+    uint16_t position;
 } Token;
 
 typedef struct {
@@ -52,42 +47,72 @@ typedef struct {
     void *data;
 } Object;
 
+typedef union {
+    Object *obj_ptr;
+    int int_value;
+    double double_value;
+    bool bool_value;
+
+    struct {
+        bool is_constant;
+        char *pointer;
+    } str_value;
+} ValueData;
+
 typedef struct {
     uint8_t type;
-    union {
-        Object *obj_ptr;
-        int int_value;
-        double double_value;
-        bool bool_value;
-
-        struct {
-            bool is_constant;
-            char *pointer;
-        } str_value;
-
-    } data;
+    ValueData data;
 } Value;
 
 typedef struct {
     uint16_t count;
     uint16_t capacity;
-    Value *value;
+    Value *data;
 } ValueArray;
 
 typedef struct {
-    void *value;
-    void *next;
-    enum Types type;
-} Node;
+    uint16_t count;
+    uint16_t capacity;
+    char **data;
+} IdentifierArray;
 
-void printTokenArray(TokenArray *token_array);
-void initTokenArray(TokenArray *token_array);
-void writeToken(TokenArray *token_array, Token token);
-void freeTokenArray(TokenArray *token_array);
+typedef struct {
+    uint8_t type;
+    uint8_t value;
+} Operation;
 
+typedef struct {
+    uint16_t count;
+    uint16_t capacity;
+    Operation *data;
+} OperationArray;
+
+void init_token_array(TokenArray *token_array);
+void write_token(TokenArray *token_array, Token token);
+void remove_token(TokenArray *token_array, uint16_t index, uint16_t remove_count);
+void free_token_array(TokenArray *token_array);
+void print_token_array(TokenArray *token_array);
+
+
+void init_value_array(ValueArray *value_array, uint16_t capacity);
+void write_value(ValueArray *value_array, uint8_t type, ValueData data);
+void free_value_array(ValueArray *value_array);
+void print_value_array(ValueArray *value_array);
+
+void init_identifier_array(IdentifierArray *identifier_array, uint16_t capacity);
+void write_identifier(IdentifierArray *identifier_array, char *identifier);
+void truncate_identifiers_from_index(IdentifierArray *identifier_array, uint16_t index);
+void free_identifier_array(IdentifierArray *identifier_array);
+void print_identifier_array(IdentifierArray *identifier_array);
 
 // Node *getNode(int index, Node **head);
 // int addNode(void *value, int index, int datatype, Node **head);
 // void freeList(Node *head);
 // int removeNode(Node **head);
 // void printVerbose(Node *head);
+
+// typedef struct {
+//     void *value;
+//     void *next;
+//     enum Types type;
+// } Node;

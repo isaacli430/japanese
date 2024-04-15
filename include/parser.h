@@ -1,1 +1,1 @@
-int parse(char *line);
+int parse(char *line, uint8_t indent, uint16_t *line_count, IdentifierArray *identifier_array, ValueArray *value_array, OperationArray *operation_array);
